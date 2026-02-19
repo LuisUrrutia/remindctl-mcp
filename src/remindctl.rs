@@ -53,8 +53,22 @@ impl RemindctlRunner {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .env_clear()
-            .env("PATH", std::env::var("PATH").unwrap_or_default());
+            .env_clear();
+
+        for key in [
+            "PATH",
+            "HOME",
+            "USER",
+            "LOGNAME",
+            "TMPDIR",
+            "LANG",
+            "LC_ALL",
+            "__CF_USER_TEXT_ENCODING",
+        ] {
+            if let Ok(value) = std::env::var(key) {
+                cmd.env(key, value);
+            }
+        }
 
         let child = cmd.spawn()?;
         let output = time::timeout(timeout, child.wait_with_output())

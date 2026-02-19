@@ -84,8 +84,8 @@ pub struct BatchActionResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct BatchProcessResult {
-    pub processed: usize,
-    pub succeeded: usize,
-    pub failed: usize,
+    pub processed: i64,
+    pub succeeded: i64,
+    pub failed: i64,
     pub results: Vec<BatchActionResult>,
 }

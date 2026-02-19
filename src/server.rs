@@ -327,7 +327,7 @@ impl AppServer {
     }
 
     #[tool(
-        description = "Primary read tool for reminders. If filter is omitted, return pending reminders only. Supported filter values: pending, incomplete, today, tomorrow, week, overdue, upcoming, completed, all, or a date string accepted by remindctl. Prefer this tool over manual filtering."
+        description = "Primary read tool for reminders. If filter is omitted, return pending reminders only. Supported filter values: pending, incomplete, today, tomorrow, week, overdue, upcoming, completed, all, or a date string in ISO 8601/RFC3339 format (for example 2026-03-01 or 2026-03-01T14:30:00Z). Prefer this tool over manual filtering."
     )]
     async fn reminders_list(
         &self,
@@ -376,7 +376,7 @@ impl AppServer {
     }
 
     #[tool(
-        description = "Create a reminder from natural input. Use listId or listName when you need strict placement. If list is omitted, auto-route to the best matching existing list using title+notes semantic overlap; if no strong match exists, fall back to Reminders/Inbox/Todo/Tareas, then first available list."
+        description = "Create a reminder from natural input. Use listId or listName when you need strict placement. For due dates, pass due as ISO 8601/RFC3339 (for example 2026-03-01 or 2026-03-01T14:30:00Z). If list is omitted, auto-route to the best matching existing list using title+notes semantic overlap; if no strong match exists, fall back to Reminders/Inbox/Todo/Tareas, then first available list."
     )]
     async fn reminder_add(
         &self,
@@ -428,7 +428,7 @@ impl AppServer {
     }
 
     #[tool(
-        description = "Update an existing reminder by ID or unique ID prefix. Supports title, due date, notes, priority, completion state, and list move. Never uses numeric index semantics."
+        description = "Update an existing reminder by ID or unique ID prefix. Supports title, due date, notes, priority, completion state, and list move. For due, use ISO 8601/RFC3339 (for example 2026-03-01 or 2026-03-01T14:30:00Z). Never uses numeric index semantics."
     )]
     async fn reminder_edit(
         &self,
@@ -597,7 +597,7 @@ impl AppServer {
     }
 
     #[tool(
-        description = "Process multiple queued reminder/list mutations in one call. Accepts actions with {id, op, args}. Supported ops: reminder_add, reminder_edit, reminder_complete, reminder_delete, list_create, list_rename, list_delete. Returns per-action success/error so queue processors can update state without extra verification calls."
+        description = "Process multiple queued reminder/list mutations in one call. Accepts actions with {id, op, args}. Supported ops: reminder_add, reminder_edit, reminder_complete, reminder_delete, list_create, list_rename, list_delete. Any due/datetime fields inside args must use ISO 8601/RFC3339 (for example 2026-03-01 or 2026-03-01T14:30:00Z). Returns per-action success/error so queue processors can update state without extra verification calls."
     )]
     async fn process_pending_actions(
         &self,
@@ -632,8 +632,8 @@ impl AppServer {
             }
         }
 
-        let processed = results.len();
-        let succeeded = results.iter().filter(|result| result.ok).count();
+        let processed = results.len() as i64;
+        let succeeded = results.iter().filter(|result| result.ok).count() as i64;
         let failed = processed.saturating_sub(succeeded);
 
         Ok(Json(BatchProcessResult {

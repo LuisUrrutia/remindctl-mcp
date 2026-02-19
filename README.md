@@ -1,4 +1,4 @@
-# remindctl-api
+# remindctl-mcp
 
 MCP server in Rust that wraps [`remindctl`](https://github.com/steipete/remindctl) so remote clients can manage Apple Reminders through a macOS host.
 
@@ -51,6 +51,154 @@ AUTH_REQUIRED=true API_KEY="change-me" BIND_ADDR=127.0.0.1:8787 cargo run --rele
 AUTH_REQUIRED=false BIND_ADDR=127.0.0.1:8787 cargo run --release
 ```
 
+## Quick install (macOS service)
+
+If you just want it running at boot/login on your Mac:
+
+```bash
+API_KEY="change-me" AUTH_REQUIRED=true BIND_ADDR=127.0.0.1:8787 ./scripts/install-macos-service.sh
+```
+
+If you have many reminders, set a higher read timeout:
+
+```bash
+API_KEY="change-me" AUTH_REQUIRED=true BIND_ADDR=127.0.0.1:8787 REMINDCTL_READ_TIMEOUT_SECS=60 ./scripts/install-macos-service.sh
+```
+
+Then verify:
+
+```bash
+launchctl print gui/$(id -u)/com.remindctl.mcp
+```
+
+## Run as macOS service (start at boot)
+
+Use `launchd` so the MCP server starts automatically on login/boot.
+
+Recommended: use the automation script.
+
+```bash
+# install/update binary, write plist, load and start service
+API_KEY="change-me" AUTH_REQUIRED=true BIND_ADDR=127.0.0.1:8787 ./scripts/install-macos-service.sh
+```
+
+Optional variables:
+
+- `SERVICE_LABEL` (default: `com.remindctl.mcp`)
+- `BIND_ADDR` (default: `127.0.0.1:8787`)
+- `AUTH_REQUIRED` (default: `true`)
+- `API_KEY` (required when `AUTH_REQUIRED=true`)
+- `REMINDCTL_BIN` (default: `remindctl`)
+- `REMINDCTL_READ_TIMEOUT_SECS` (default: `60` in installer)
+- `REMINDCTL_WRITE_TIMEOUT_SECS` (default: `20` in installer)
+
+Uninstall:
+
+```bash
+./scripts/uninstall-macos-service.sh
+```
+
+### Manual setup (if you prefer)
+
+Install the binary into `~/.cargo/bin`, then point the service to that stable path.
+
+1) Build + install/update the binary:
+
+```bash
+cargo install --path . --locked --force
+# binary path: ~/.cargo/bin/remindctl-mcp
+```
+
+2) Create logs directory:
+
+```bash
+mkdir -p ~/.openclaw/logs
+```
+
+3) Create `~/Library/LaunchAgents/com.remindctl.mcp.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.remindctl.mcp</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/YOUR_USER/.cargo/bin/remindctl-mcp</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>BIND_ADDR</key>
+    <string>127.0.0.1:8787</string>
+    <key>AUTH_REQUIRED</key>
+    <string>true</string>
+    <key>API_KEY</key>
+    <string>change-me</string>
+    <key>REMINDCTL_BIN</key>
+    <string>remindctl</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/YOUR_USER/.openclaw/logs/remindctl-mcp.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/YOUR_USER/.openclaw/logs/remindctl-mcp.err.log</string>
+</dict>
+</plist>
+```
+
+4) Load and enable it:
+
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.remindctl.mcp.plist
+launchctl enable gui/$(id -u)/com.remindctl.mcp
+launchctl kickstart -k gui/$(id -u)/com.remindctl.mcp
+```
+
+5) Verify service + endpoint:
+
+```bash
+launchctl print gui/$(id -u)/com.remindctl.mcp
+npx mcporter list remindctl
+npx mcporter call remindctl.server_health
+```
+
+Note: raw `curl` requests to `/mcp` must follow MCP initialization
+(`initialize` -> `notifications/initialized` -> tool calls in the same session).
+Calling `tools/list` directly without initialize returns:
+`Unexpected message, expect initialize request`.
+
+Useful commands:
+
+```bash
+# Check status
+launchctl print gui/$(id -u)/com.remindctl.mcp
+
+# Restart after binary/env changes
+launchctl kickstart -k gui/$(id -u)/com.remindctl.mcp
+
+# Tail logs
+tail -f ~/.openclaw/logs/remindctl-mcp.err.log
+
+# Stop and remove service
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.remindctl.mcp.plist
+```
+
+Notes:
+
+- Replace `YOUR_USER` and `API_KEY` before loading.
+- After code updates, run `cargo install --path . --locked --force` and then `launchctl kickstart -k ...`.
+- Prefer `AUTH_REQUIRED=true` for any non-localhost exposure.
+- `LaunchAgents` run in the logged-in user session, which is usually what you want for Reminders access.
+
 ## OpenClaw + MCPorter setup
 
 This project is intended to be consumed from OpenClaw through `mcporter`.
@@ -69,7 +217,7 @@ Create `~/.mcporter/mcporter.json` (or `config/mcporter.json` in your workspace)
 {
   "mcpServers": {
     "remindctl": {
-      "description": "Apple Reminders MCP via remindctl-api",
+      "description": "Apple Reminders MCP via remindctl-mcp",
       "baseUrl": "http://127.0.0.1:8787/mcp",
       "headers": {
         "Authorization": "Bearer change-me"
@@ -149,7 +297,7 @@ Then use the Mac Tailnet IP (example `100.x.y.z`).
 {
   "mcpServers": {
     "remindctl": {
-      "description": "Apple Reminders MCP via remindctl-api",
+      "description": "Apple Reminders MCP via remindctl-mcp",
       "baseUrl": "http://100.x.y.z:8787/mcp",
       "headers": {
         "Authorization": "Bearer change-me"
